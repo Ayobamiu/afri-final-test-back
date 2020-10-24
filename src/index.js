@@ -4,9 +4,10 @@ require("./db/mongoose");
 
 const app = express();
 
+const PORT = process.env.PORT;
 app.use(express.json());
 app.use(taskRouter);
 
-app.listen(3003, () => {
-  console.log("on PORT 3003");
+app.listen(PORT, () => {
+  console.log("on PORT " + PORT);
 });
