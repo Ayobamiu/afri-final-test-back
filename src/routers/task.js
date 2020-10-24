@@ -29,6 +29,7 @@ router.get("/tasks/:id", async (req, res) => {
     res.status(404).send();
   }
 });
+
 router.patch("/tasks/:id", async (req, res) => {
   const updates = Object.keys(req.body);
   const allowedUpdates = ["title", "completed"];
