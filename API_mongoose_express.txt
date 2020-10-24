@@ -1,0 +1,1035 @@
+folders and files
+/db to store our mongoose connection to database
+/models to store our models 
+/routers to store rout for our individual models
+index.js  entry point to our app
+
+
+-Install express (index.js)
+    //import
+    const express = require("express");
+
+    //create express App
+    const app = express();
+
+    //tell express to pass incoming request body and send to us in json format
+    app.use(express.json());
+
+    //Use get function to send data 
+    app.get("", (req, res) => {
+    res.send("First page");
+    });
+    app.get("/product", (req, res) => {
+    const type = req.query.type;
+    res.send({ product: "product A", type });
+    });
+
+    //App listen to a port
+    app.listen(3001, () => {
+    console.log("Server is up and running at Port 3001");
+    });
+
+For now, express is ready to power our API
+
+
+-Install mongoose (/db/mongoose.js)
+
+Mongoose makes it easy for to create models, set requirements for our models, create instances of our models and Interact with database.
+
+
+    mongoose.connect("mongodb://127.0.0.1:27017/<database name>", {
+    useNewUrlParser: true,
+    useCreateIndex: true,
+    });
+
+    || <database name> is the name of our new collection (database) running local in MongoDB
+
+    - Create models with mongoose. (/models/<model>.js) e.g.
+    const User = mongoose.model("User", {
+    name: {
+        type: String, 
+    },
+    age: {
+        type: Number,
+    },
+    });
+
+
+Data Validation and Sanitization
+
+Validation, to restrict what data to be stored in the database, while sanitization, to store user data in a uniform and standardized way. mongoose comes with custom validations.
+
+
+- Install validator. (library)
+    npm i validator
+
+
+While Mongoose provides basic tools for performing validation, the validator library provides useful methods for validating data such as email addresses, phone numbers, zip codes, and more.
+
+example of validation :
+    const User = mongoose.model("User", {
+    name: {
+        type: String,
+        required: true,
+        trim: true,
+    },
+    age: {
+        type: Number,
+        trim: true,
+    },
+    email: {
+        type: Number,
+        required: true,
+        trim: true,
+        lowerCase: true,
+        validate(value) {
+        if (!validator.isEmail(value)) {
+            throw new Error("Email is Invalid");
+        }
+        },
+    },
+    });
+
+
+
+Resource Creation Endpoints
+Resource creation endpoints use the POST HTTP method. The URL structure is
+/resources. If you wanted to create a user, it would be POST /users. If you wanted to
+create a note, it would be POST /notes
+
+
+Our model is set, we have a connection to MongoDB and we can send data to browser.
+Now, we will set up express to get req.body from Postman which will contain data to create model instances.
+
+express.json is also setup to parse incoming JSON into a JavaScript object which you
+can access on req.body
+
+(/routers/<model name>.js)
+e.g.
+
+    app.post("/users", async (req, res) => {
+    const user = new User(req.body);
+    try {
+        await user.save();
+        res.send(user);
+    } catch (error) {
+        res.status(400).send(error);
+    }
+    });
+
+
+Resource Reading Endpoints
+Resource reading endpoints use the GET HTTP method. The URL structure is /resources
+for a list of resources and /resources/:id for fetching an individual resource by its ID. If
+you wanted to fetch all your notes, it would be GET /notes. If you wanted to fetch an
+
+
+individual note with the ID of 198, it would be GET /notes/198.
+
+
+e.g.
+    app.get("/users", async (req, res) => {
+    await User.find({});
+    try {
+        res.send(users);
+    } catch (error) {
+        res.status(500).send(error);
+    }
+    });
+
+    app.get("/users/:id", async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) {
+        res.status(404).send("user not found!");
+        }
+        res.send(user);
+    } catch (error) {
+        res.status(400).send(error);
+    }
+    });
+
+
+
+Resource Updating Endpoints
+Resource updating endpoints use the PATCH HTTP method. The URL structure is
+/resources/:id for updating an individual resource by its ID. If you want to update an
+individual note with the ID of 44, it would be PATCH /notes/44.
+
+
+app.patch("/users/:id", async (req, res) => {
+  const updates = Object.keys(req.body);
+  const allowedUpdates = ["name", "email", "age", "password"];
+  const isValidOperation = updates.every((update) =>
+    allowedUpdates.includes(update)
+  );
+  if (!isValidOperation) {
+    return res.status(400).send({ error: "Invalid updates!" });
+  }
+  try {
+    const user = await User.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+    });
+    if (!user) {
+      return res.status(404).send();
+    }
+    res.send(user);
+  } catch (error) {
+    res.status(400).send();
+  }
+});
+
+
+Resource deleting endpoints use the DELETE HTTP method. The URL structure is
+/resources/:id for deleting an individual resource by its ID. If you want to delete an
+individual task with the ID of 897, it would be DELETE /tasks/897
+
+app.delete("/users/:id", async (req, res) => {
+  try {
+    const user = await User.findByIdAndDelete(req.params.id);
+    if (!user) {
+      return res.status(404).send();
+    }
+    res.send(user);
+  } catch (error) {
+    res.status(500).send();
+  }
+});
+
+
+
+After working with all endpoints. Lets secure our password by hashing before storing them to database.
+
+we use middleware to do this.
+
+First, refactor our model
+
+const userSchema = mongoose.Schema({
+  name: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  email: {
+    type: String,
+    required: true,
+    trim: true,
+    lowerCase: true,
+    validate(value) {
+      if (!validator.isEmail(value)) {
+        throw new Error("Email is Invalid");
+      }
+    },
+  },
+  age: {
+    type: Number,
+    default: 18,
+    validate(value) {
+      if (value < 0) {
+        throw new Error("Age must be a positive number!");
+      }
+    },
+  },
+  password: {
+    type: String,
+    required: true,
+    trim: true,
+    minlength: 6,
+  },
+})
+const User = mongoose.model("User", userSchema)
+
+
+The middleware function will be added to the userSchema
+
+userSchema.pre("save", async function (next) {
+  const user = this;
+  if (user.isModified("password")) {
+    user.password = await bcrypt.hash(user.password, 8);
+  }
+
+  next();
+});
+
+
+findByIdAndUpdate bypasses middleware, so we need to refactor our Updating endpoint.
+
+app.patch("/users/:id", async (req, res) => {
+  const updates = Object.keys(req.body);
+  const allowedUpdates = ["name", "email", "age", "password"];
+  const isValidOperation = updates.every((update) =>
+    allowedUpdates.includes(update)
+  );
+  if (!isValidOperation) {
+    return res.status(400).send({ error: "Invalid updates!" });
+  }
+  try {
+    const user = await User.findById(req.params.id);
+    updates.forEach((update) => (user[update] = req.body[update]));
+    await user.save();
+   // const user = await User.findByIdAndUpdate(req.params.id, req.body, {
+   //   new: true,
+   //   runValidators: true,
+   // });
+    if (!user) {
+      return res.status(404).send();
+    }
+    res.send(user);
+  } catch (error) {
+    res.status(400).send();
+  }
+});
+
+
+
+
+We have securely stored our password, now let's log in our users
+
+create a new endpoint /users/login with a post request.
+
+idea::: when user enter email and password, we compare and confirm that user exists and password matches. we then return a token which serves as authentication.
+
+Apart from the custom queries that mongoose provides for us, we want to define a new one to suit our need. we will define a function findByCredentials(email, password).
+
+we can define it in the user model
+
+on the user model, we will add statics function to the userSchema
+
+userSchema.statics.findByCredentials = async (email, password) => {
+  //check if user exists
+  const user = await User.findOne({ email });
+  if (!user) {
+    throw new Error("Unable to login");
+  }
+
+  //compare if the password matches the password for the user
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) {
+    throw new Error("Unable to login");
+  }
+
+  return user;
+};
+
+
+To generate token, we will be using jsonwebtoken: 
+
+The sign method can be used to generate a new token. sign accepts three arguments:
+The first is the data to embed in the token: This needs to include a unique identifier for the
+user.
+The second is a secret phrase: This is used to issue and validate tokens, ensuring that the
+token data hasn’t been tampered with.
+The third is a set of options: The example below uses expiresIn to create a token that’s
+valid for seven days.
+
+const jwt = require('jsonwebtoken')
+const token = jwt.sign({ _id: 'abc123' }, 'thisismynewcourse', { expiresIn:
+'7 days' })
+
+
+
+The server can verify the token using verify. This requires two arguments:
+
+The first is the token to validate.
+
+The second is the secret phrase that the token was created with. If valid, the embedded
+data will be returned. This would allow the server to figure out which user is performing
+the operation.
+
+const data = jwt.verify(token, 'thisismynewcourse')
+// data._id contains the user id of the user that owns this token
+
+
+
+By keeping track of token gotten by users, we can log them in and out. So, we store all tokens generated by user as part of the user document.
+
+Add tokens to user model
+lets define a method on the userSchema that will be used on all instancesof User
+
+//Schema.methods are accessible on the Model instances
+userSchema.methods.generateAuthToken = async function () {
+  const user = this;
+  const token = jwt.sign({ _id: user._id.toString() }, "thisismyjsonsignature");
+  return token;
+};
+
+And, we should return a user data and token when a user login and signup
+router.post("/users/login", async (req, res) => {
+  try {
+    const user = await User.findByCredentials(
+      req.body.email,
+      req.body.password
+    );
+    const token = await user.generateAuthToken();
+
+    res.send({ user, token });
+  } catch (error) {
+    res.status(400).send();
+  }
+});
+
+router.post("/users", async (req, res) => {
+  const user = new User(req.body);
+  const token = await user.generateAuthToken();
+  try {
+    await user.save();
+    res.send({ user, token });
+  } catch (error) {
+    res.status(400).send(error);
+  }
+});
+
+To keep track of the user logins, we should add tokens (a list) to our user schema and push token to it any time a user logs in and when they signup. So, lets refactor our generateAuthToken method.
+
+//Schema.methods are accessible on the Model instances
+userSchema.methods.generateAuthToken = async function () {
+  const user = this;
+  const token = jwt.sign({ _id: user._id.toString() }, "thisismyjsonsignature");
+  user.tokens = user.tokens.concat({ token }); 
+  await user.save();
+  return token;
+};
+
+
+Now when a user signup, a token is returned and token is stored in the tokens list of User
+
+We are set to use our token for authentication.
+
+To do this, we use a middleware function, we send our token through the req header,
+
+i.e. 
+Authorization : Bearer <token>
+So, if user has token in place, our req.header will return the token.
+
+e.g.
+
+const auth = async (req, res, next) => {
+  try {
+    const token = req.header("Authorization").replace("Bearer ", "");
+    console.log(token);
+  } catch (error) {
+    res.status(401).send({ error: "Please Authenticate" });
+  }
+};
+Lets add auth to our GET users request,
+router.get("/users", auth, async (req, res) => {
+  const users = await User.find({});
+  try {
+    res.send(users);
+  } catch (error) {
+    res.status(500).send(error);
+  }
+});
+
+After getting token from the auth, we will decode the token to get user_id.
+
+we then use the user_id as required.
+
+To make getting our user easier when they are authenticated, we allow the auth middleware use the token and decoded _id to find user. if the user exists, it returns the req.user = user.
+
+we can get user directly from the auth middleware.
+
+i.e.  
+const auth = async (req, res, next) => {
+  try {
+    const token = req.header("Authorization").replace("Bearer ", "");
+    const decoded = jwt.verify(token, "thisismyjsonsignature");
+    const user = await User.findOne({
+      _id: decoded._id,
+      "tokens.token": token,
+    });
+    if (!user) {
+      throw new Error();
+    }
+    req.user = user;
+    next();
+  } catch (error) {
+    res.status(401).send({ error: "Please Authenticate" });
+  }
+};
+
+
+To set up logout, 
+Lets make an update to our auth middleware, let it also return token so that we can just remove it from the user.tokens list.
+
+const auth = async (req, res, next) => {
+  try {
+    const token = req.header("Authorization").replace("Bearer ", "");
+    const decoded = jwt.verify(token, "thisismyjsonsignature");
+    const user = await User.findOne({
+      _id: decoded._id,
+      "tokens.token": token,
+    });
+    if (!user) {
+      throw new Error();
+    }
+    req.token = token;
+    req.user = user;
+    next();
+  } catch (error) {
+    res.status(401).send({ error: "Please Authenticate" });
+  }
+};
+
+
+and our logout endpoint will be as follows
+
+
+router.post("/users/logout", auth, (req, res) => {
+  try {
+    //remove user currently used token from user's token list
+    req.user.tokens = req.user.tokens.filter(
+      (token) => token.token !== req.token
+    );
+    await req.user.save()
+    res.send()
+  } catch (error) {
+    res.status(500).send()
+  }
+});
+
+
+this logout endpoint allows user log out on individual device were they make the request, we can allow user log out of all logged in devices at once using the /logoutAll endpoint
+
+
+router.post("/users/logoutAll", auth, async (req, res) => {
+  try {
+    //remove all users tokens from user's token list
+    req.user.tokens = [];
+    await req.user.save();
+    res.send();
+  } catch (error) {
+    res.status(500).send();
+  }
+});
+
+
+
+Handling private data: currently, user's passowrd and token are sent back as response when user logs in and signup. this info need to be hidden.
+
+Here is how, we define a method on User model that applies to all User instances
+
+userSchema.methods.getPublicProfile = function () {
+  const user = this;
+  const userObject = user.toObject();
+  delete userObject.password;
+  delete userObject.tokens;
+  return userObject;
+};
+
+so, instead of returning res.send({user , token }) when user logs in, we return 
+res.send({user: user.getPublicProfile() , token })
+
+This works perfectly, but a simpler way of acheiving the same result.
+
+userSchema.methods.toJSON = function () {
+  const user = this;
+  const userObject = user.toObject();
+  delete userObject.password;
+  delete userObject.tokens;
+  return userObject;
+};
+
+and with this, we only have to return res.send({user , token }).
+
+any time we return a user, user details minus password and tokens will be returned
+
+
+lets go ahead and use auth were necessary in our app
+
+
+
+
+USER TASK RELATIONSHIP
+
+Its pretty easy to associate user with tasks, 
+Our approach, create a owner on the Task model with type:mongoose.Schema.Types.ObjectID
+
+const Task = mongoose.model("Task", {
+  description: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+
+  completed: {
+    type: Boolean,
+    default: false,
+  },
+  owner: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+    ref:"User" //Makes a reference to a user instance with the ID
+  },
+});
+
+
+In the create task endpoint, we add auth and get the logged-in user details.
+
+Before saving the task instance, we set owner to the req.user._id
+
+i.e.
+
+router.post("/tasks", auth, async (req, res) => {
+  const task = new Task({ ...req.body, owner: req.user._id });
+  try {
+    await task.save();
+    res.send(task);
+  } catch (error) {
+    res.status(400).send(error);
+  }
+});
+
+with this config, a reference to task.owner will return an id.
+
+But we can take this a few steps further, 
+
+by using,
+
+const user = await task.populate('owner').execPopulate()
+this returns the entire user document, as oppossed to task.owner that only returns user_id.
+
+
+
+ACCESSING TASKS RELATED TO A USER.
+Now, getting a user and accessing user.tasks will return undefined because there is no property of task on the user model.
+
+using a virtual property on the userSchema, virtual property are not actual data stored in the database, it is a relationship between two entities, in this case, User and Task
+
+userSchema.virtual("tasks", {
+  ref:"Task",
+  localField:"_id",
+  foreignField:"owner"
+})
+
+const tasks = await user.populate('tasks').execPopulate()
+
+
+Next, lets add auth to all necessary routers
+
+CASCADING DELETE TASKS
+One way to do this: goto users/delete route and delete all tasks related to the deleted user.
+But, with our knowledge of middleware, we can set this up
+
+userSchema.pre("remove", async function (next) {
+  const user = this;
+  await Task.deleteMany({ owner: user._id });
+  next();
+});
+
+with this, any time we delete a user, all tasks related to the user gets deleted.
+
+
+TIMESTAMPS
+
+Lets add created_at and updated_at properties to user and tasks.
+
+SImply, when creating our schema, after passing the properties object, we should pass another arg { timestamps:true}
+
+FILTERING DATA USING QUERY STRING
+
+Lets start with our /tasks/get endpoint.
+
+we will refactor our populate method to return tasks with certain properties
+e.g. to get incomplete tasks
+router.get("/tasks", auth, async (req, res) => {
+  try {
+    await req.user
+      .populate({
+        path: "tasks",
+        match: {
+          completed: false,
+        },
+      })
+      .execPopulate();
+    res.send(req.user.tasks);
+  } catch (error) {
+    res.status(500).send(error);
+  }
+});
+
+to preset the completed value from the query,
+
+router.get("/tasks", auth, async (req, res) => {
+  const match = {};
+  if (req.query.completed) {
+    match.completed = req.query.completed === "true";
+  }
+  try {
+    await req.user
+      .populate({
+        path: "tasks",
+        match,
+      })
+      .execPopulate();
+    res.send(req.user.tasks);
+  } catch (error) {
+    res.status(500).send(error);
+  }
+});
+
+PAGINATION USING QUERY STRING
+
+to implement pagination, we use limit and skip properties. Limit is the number of data we get at once and skip is the number of data we are leaving behind
+
+router.get("/tasks", auth, async (req, res) => {
+  const match = {};
+  if (req.query.completed) {
+    match.completed = req.query.completed === "true";
+  }
+  try {
+    await req.user
+      .populate({
+        path: "tasks",
+        match,
+        options: {
+          limit: parseInt(req.query.limit),
+          skip: parseInt(req.query.skip),
+        },
+      })
+      .execPopulate();
+    res.send(req.user.tasks);
+  } catch (error) {
+    res.status(500).send(error);
+  }
+});
+
+
+
+SORTING DATA USING QUERY STRING
+
+to do this, we use sort option.
+e.g.
+
+router.get("/tasks", auth, async (req, res) => {
+  const match = {};
+  if (req.query.completed) {
+    match.completed = req.query.completed === "true";
+  }
+  try {
+    await req.user
+      .populate({
+        path: "tasks",
+        match,
+        options: {
+          limit: parseInt(req.query.limit),
+          skip: parseInt(req.query.skip),
+          sort: {
+            createdAt: 1,
+          },
+        },
+      })
+      .execPopulate();
+    res.send(req.user.tasks);
+  } catch (error) {
+    res.status(500).send(error);
+  }
+});
+
+sort: {
+       createdAt: 1,
+      },
+means we are sorting by createdAt, in ascending order
+
+sort: {
+        createdAt: -1,
+      },
+means we are sorting by createdAt, in descending order
+
+
+To get sorting input from queries,
+router.get("/tasks", auth, async (req, res) => {
+  const match = {};
+  if (req.query.completed) {
+    match.completed = req.query.completed === "true";
+  }
+  const sort = {};
+  if (req.query.sortBy) {
+    const parts = req.query.sortBy.split(":");
+    sort[parts[0]] = parts[1] === "desc" ? -1 : 1;
+  }
+  try {
+    await req.user
+      .populate({
+        path: "tasks",
+        match,
+        options: {
+          limit: parseInt(req.query.limit),
+          skip: parseInt(req.query.skip),
+          sort,
+        },
+      })
+      .execPopulate();
+    res.send(req.user.tasks);
+  } catch (error) {
+    res.status(500).send(error);
+  }
+});
+
+
+
+FILE UPLOAD
+express doesn't support file upload, but an express library makes this possible
+
+
+npm i multer
+const multer = require("multer");
+const avatar = multer({ dest: "avatars/" });
+router.post("/users/me/avatar", avatar.single("avatar"), (req, res) => {
+  res.send();
+});
+
+this config allow us upload any file type with name avatar to folder avatars/
+
+VALIDATING FILE
+to specify, file type and size, we set different options on the multer instance we created
+
+const avatar = multer({
+  dest: "avatars/",
+  limits: {
+    fileSize: 1000000, //1mb
+  },
+});
+
+this limits our file size to 1mb
+
+const avatar = multer({
+  dest: "avatars/",
+  limits: {
+    fileSize: 1000000, //1mb
+  },
+  fileFilter(req, file, cb) {
+    if (!file.originalname.endsWith(".pdf")) {
+      cb(new Error("Kindly upload a PDF"));
+    }
+    cb(undefined, true);
+
+    // cb(new Error("File Upload failed!!"));
+    // cb(undefined, true); //no error & upload should be accepted
+    // cb(undefined, false); //no error & upload should be silently rejected
+  },
+});
+
+this allow us to only accept file ending with .pdf with size limit of 1mb
+
+const avatar = multer({
+  dest: "avatars/",
+  limits: {
+    fileSize: 1000000, //1mb
+  },
+  fileFilter(req, file, cb) {
+    if (!file.originalname.match(/\.(jpg|jpeg|png)$/)) {
+      return cb(new Error("Kindly upload an image"));
+    }
+    cb(undefined, true);
+
+    // cb(new Error("File Upload failed!!"));
+    // cb(undefined, true); //no error & upload should be accepted
+    // cb(undefined, false); //no error & upload should be silently rejected
+  },
+});
+
+this allow us to only accept file ending with .jpg, .jpeg and .png with size limit of 1mb
+
+Currently, when file is too large or not the type we want, the error message is being displayed in html. for us to display it in json format, we'll add another callback function to the router.post()
+
+router.post(
+  "/users/me/avatar",
+  avatar.single("avatar"),
+  (req, res) => {
+    res.send();
+  },
+  (error, req, res, next) => {
+    res.status(400).send({ error: error.message });
+  }
+);
+
+
+Currently, we save our file uploads to the file system. But for deployment purpose, we don't want this.
+So, we will remove the dest='/avatars' property from our multer instance that we created.
+and handle what happens to the file in our router.post() 
+
+router.post(
+  "/users/me/avatar",
+  auth,
+  avatar.single("avatar"),
+  async (req, res) => {
+    req.user.avatar = req.file.buffer;
+    await req.user.save();
+    res.send();
+  },
+  (error, req, res, next) => {
+    res.status(400).send({ error: error.message });
+  }
+);
+
+Here, we added authentication and saved the avatar to the user. Before this was possible, we've added an avatar property with type buffer to the user model.
+
+
+To get our image served to user, we need some config.
+
+router.get("/users/:id/avatar", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user || !user.avatar) {
+      throw new Error();
+    }
+    res.set("Content-Type", "image/jpg");
+    res.send(user.avatar);
+  } catch (error) {
+    res.status(404).send();
+  }
+});
+
+This works well because the image we uploaded is a jpg file. what if not?
+we need a way to format our image after they are uploaded.
+
+First, lets remove our avatar from response when we get our user profile.
+
+userSchema.methods.toJSON = function () {
+  const user = this;
+  const userObject = user.toObject();
+  delete userObject.password;
+  delete userObject.tokens;
+  delete userObject.avatar;
+  return userObject;
+};
+
+
+we are using an npm library, sharp
+
+npm i sharp
+
+
+Uploading files and text data.
+
+CONFIGURE S# BUCKET TO UPLOAD AND RETRIEVE fileSize
+const aws = require("aws-sdk");
+const multer = require("multer");
+const multerS3 = require("multer-s3");
+
+const s3 = new aws.S3();
+aws.config.update({
+  secretAccessKey: process.env.S3_ACCESS_SECRET,
+  accessKeyId: process.env.S3_ACCESS_KEY,
+  region: "us-east-2",
+});
+
+const storage = multerS3({
+  acl: "public-read",
+  s3,
+  bucket: "usman-first-node-app",
+  metadata: function (req, file, cb) {
+    cb(null, { fieldName: file.fieldname });
+  },
+  key: function (req, file, cb) {
+    cb(null, Date.now().toString());
+  },
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 1000000, //1mb
+  },
+  fileFilter(req, file, cb) {
+    if (!file.originalname.match(/\.(jpg|jpeg|png)$/)) {
+      return cb(new Error("Kindly upload an image"));
+    }
+    cb(undefined, true);
+
+    // cb(new Error("File Upload failed!!"));
+    // cb(undefined, true); //no error & upload should be accepted
+    // cb(undefined, false); //no error & upload should be silently rejected
+  },
+});
+
+module.exports = upload;
+
+
+SET UP PRODUCT MODEL
+const mongoose = require("mongoose");
+
+const productSchema = mongoose.Schema(
+  {
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    description: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    images: [
+      {
+        image: {
+          type: String,
+        },
+      },
+    ],
+    owner: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+      ref: "User", //Makes a reference to a user instance with the ID
+    },
+  },
+  { timestamps: true }
+);
+const Product = mongoose.model("Product", productSchema);
+
+module.exports = Product;
+
+
+ENNPOINT
+
+router.post("/products", auth, upload.array("images", 4), async (req, res) => {
+  let images = [];
+  for (let index = 0; index < req.files.length; index++) {
+    const element = req.files[index];
+    images.push({ image: element.location });
+  }
+  const product = new Product({
+    title: req.body.title,
+    description: req.body.description,
+    images,
+    owner: req.user._id,
+  });
+  try {
+    await product.save();
+    res.status(201).send(product);
+  } catch (error) {
+    res.status(400).send();
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+products
+user
+order amount
+user name
+shipping address
+shipping email
+shipped
+
