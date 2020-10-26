@@ -1,5 +1,5 @@
 # afri-final-test-back
-## A simple CRUP Task App
+## A simple CRUD Task App
 
 Visit [website](https://afri-final-test-back.herokuapp.com)
 
